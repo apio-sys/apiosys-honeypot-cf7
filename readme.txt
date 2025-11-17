@@ -20,7 +20,7 @@ I like to use Contact Form 7 on most of my WordPress sites. It's a powerful form
 - Activate the plugin through the "Plugins" menu in WordPress, you MUST have Contact Form 7 AND Flamingo installed and enabled.
 - Add the following shortcodes to your Contact Form 7 forms:
 
-[honeypot] - Adds the hidden honeypot field\
+[honeypot] - Adds the hidden honeypot field
 [timestamp] - Adds time-based validation
 
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
@@ -41,6 +41,17 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 2. Spam caught when the form was submitted too quickly.
 3. Spam caught when too many URLs are present in the message fields.
 4. Spam caught when certain keywords are detected.
+
+== Installation ==
+
+- Install the plugin using the regular plugin setup routine or upload the entire apiosys-honeypot-cf7 folder to the /wp-content/plugins/ directory.
+- Activate the plugin through the "Plugins" menu in WordPress, you MUST have Contact Form 7 AND Flamingo installed and enabled.
+- Add the following shortcodes to your Contact Form 7 forms:
+
+[honeypot] - Adds the hidden honeypot field
+[timestamp] - Adds time-based validation
+
+- Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
 = 0.9.3 - 2025-11-16 =

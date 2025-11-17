@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: Apio systems Honeypot for Contact Form 7
- * Plugin URI: https://wordpress.org/plugins/apiosys-honeypot-cf7
+ * Plugin Name: Apio systems - Honeypot for Contact Form 7
+ * Plugin URI: https://apio.systems
  * Description: Basic Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes honeypot field, time-based validation, and content analysis. Store results in Flamingo.
  * Version: 0.9.3
  * Author: Joris Le Blansch
