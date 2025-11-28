@@ -33,7 +33,7 @@ I like to use Contact Form 7 on most of my WordPress sites. It's a powerful form
 
 == Does it really work? ==
 
-It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (i.e. 1 in a thousand) of spam going through. That usually corresponds to humans paid to fill forms or sophisticated bots. Please feel free to contribute to make it even better. You can contribute directly here: https://github.com/apio-sys/apiosys-honeypot-cf7 .
+It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (i.e. 1 in a thousand) of spam going through. That usually corresponds to humans paid to fill forms or sophisticated bots. Please feel free to contribute to make it even better. You can contribute directly [here](https://github.com/apio-sys/apiosys-honeypot-cf7).
 
 == Screenshots ==
 
