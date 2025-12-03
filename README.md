@@ -34,7 +34,9 @@ Example form:
 ## What tests are used?
 
 - A Honeypot Field
+- A Checkbox Trap
 - Time-Based Validation
+- Email domain Check
 - Basic Content Analysis
 
 ## Does it really work?
