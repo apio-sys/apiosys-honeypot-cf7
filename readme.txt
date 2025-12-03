@@ -28,7 +28,9 @@ I like to use Contact Form 7 on most of my WordPress sites. It's a powerful form
 == What tests are used? ==
 
 - A Honeypot Field
+- A Checkbox Trap
 - Time-Based Validation
+- Email domain Check
 - Basic Content Analysis
 
 == Does it really work? ==
