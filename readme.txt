@@ -1,9 +1,9 @@
-=== Apio systems Honeypot for Contact Form 7 ===
+=== Apio systems - Honeypot for Contact Form 7 ===
 Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 6.9
-Stable tag: 0.9.3
+Stable tag: 0.9.4
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -54,6 +54,14 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 0.9.4 - 2025-12-04 =
+* FEAT: Added checkbox trap.
+* FEAT: Improved field hiding.
+* FEAT: Email domain TLD check.
+* FEAT: Updated default spam keywords list.
+* FEAT: Separate list with spam phrases.
+* FEAT: Obfuscated timestamp.
+
 = 0.9.3 - 2025-11-16 =
 * FIX: CSS resource version.
 
