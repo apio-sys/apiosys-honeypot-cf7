@@ -2,7 +2,7 @@
 Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
-Tested up to: 6.9
+Tested up to: 7.0
 Stable tag: 0.9.4
 Requires PHP: 7.2
 License: MIT
