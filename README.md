@@ -37,7 +37,8 @@ Example form:
 - A Checkbox Trap
 - Time-Based Validation
 - Email domain Check
-- Basic Content Analysis
+- Content Analysis (across all form fields, not just the message)
+- Weak-Signal Scoring (combines many small clues to catch "human-looking" spam)
 
 ## Does it really work?
 

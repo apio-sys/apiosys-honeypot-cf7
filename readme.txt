@@ -3,7 +3,7 @@ Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 7.0
-Stable tag: 0.9.4
+Stable tag: 1.0.0
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -31,7 +31,8 @@ I like to use Contact Form 7 on most of my WordPress sites. It's a powerful form
 - A Checkbox Trap
 - Time-Based Validation
 - Email domain Check
-- Basic Content Analysis
+- Content Analysis (across all form fields, not just the message)
+- Weak-Signal Scoring (combines many small clues to catch "human-looking" spam)
 
 == Does it really work? ==
 
@@ -56,6 +57,15 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 1.0.0 - 2026-07-12 =
+* FEAT: Weak-signal spam scoring - combines many small clues (links, free/disposable email, gmail alias tricks, random digits in email, very short messages, "Name & Name" company patterns, missing JavaScript) with a configurable threshold to catch human-looking spam that passes every individual check.
+* FEAT: Content analysis now scans additional fields (name, company, job title, subject...), not only the message.
+* FEAT: Keyword matching normalizes hyphens, punctuation and accents, so "no-obligation" matches "no obligation".
+* FEAT: Detects whitespace / blank-line flooding used to hide spam.
+* FEAT: URL detection now also counts www. and bare-domain links; optional "disallow any link in message" toggle.
+* CHANGE: Merged the separate "spam keywords" and "spam phrases" lists into a single list (existing settings are migrated automatically).
+* First mature release after months of testing on live data.
+
 = 0.9.4 - 2025-12-04 =
 * FEAT: Added checkbox trap.
 * FEAT: Improved field hiding.
