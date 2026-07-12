@@ -871,8 +871,8 @@ function apiosys_honeypot_cf7_scoring($spam, $submission) {
         $spam = true;
         $submission->add_spam_log(array(
             'agent' => 'spam-score',
-            /* translators: 1: total score, 2: threshold, 3: comma-separated list of matched signals */
             'reason' => sprintf(
+                /* translators: 1: total score, 2: threshold, 3: comma-separated list of matched signals */
                 __('Spam score %1$d (threshold %2$d): %3$s', 'apiosys-honeypot-cf7'),
                 $score,
                 $threshold,
