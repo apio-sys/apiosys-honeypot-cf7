@@ -3,7 +3,7 @@ Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 7.0
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -57,6 +57,9 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 1.0.1 - 2026-07-14 =
+* CHANGE: Widened the "short message" scoring signal from under 6 words to under 15 words (still a single weak point). Catches content-free one-liners ("I agree", "write about your prices") from JS-executing bots that leave the honeypot empty, while staying well clear of genuine inquiries, which run to dozens of words.
+
 = 1.0.0 - 2026-07-12 =
 * FEAT: Weak-signal spam scoring - combines many small clues (links, free/disposable email, gmail alias tricks, random digits in email, very short messages, "Name & Name" company patterns, missing JavaScript) with a configurable threshold to catch human-looking spam that passes every individual check.
 * FEAT: Content analysis now scans additional fields (name, company, job title, subject...), not only the message.

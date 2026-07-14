@@ -3,7 +3,7 @@
  * Plugin Name: Apio systems - Honeypot for Contact Form 7
  * Plugin URI: https://apio.systems
  * Description: Advanced Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes multiple honeypot fields, checkbox trap, time-based validation, and comprehensive content analysis. Store results in Flamingo.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Joris Le Blansch
  * Author URI: https://www.apio.systems
  * License: MIT
@@ -846,10 +846,13 @@ function apiosys_honeypot_cf7_scoring($spam, $submission) {
         }
     }
 
-    // Very short message
-    if ($message !== '' && str_word_count($message) < 6) {
+    // Short message. Genuine inquiries to a contact form describe a need and run
+    // to dozens of words; content-free one-liners ("I agree", "write about your
+    // prices") are a weak spam signal on their own. Threshold kept generous (15)
+    // so it only ever tips a submission over the line alongside two other signals.
+    if ($message !== '' && str_word_count($message) < 15) {
         $score += 1;
-        $reasons[] = 'very short message';
+        $reasons[] = 'short message';
     }
 
     // "Name & Name Services/Ltd/LLC..." company pattern
@@ -947,7 +950,7 @@ function apiosys_honeypot_cf7_field_pattern_analysis($spam, $submission) {
 add_action('wp_enqueue_scripts', 'apiosys_honeypot_cf7_enqueue_styles');
 function apiosys_honeypot_cf7_enqueue_styles() {
     // Register the style handle (no file needed for inline-only styles)
-    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.0');
+    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.1');
     
     // Enqueue the registered style
     wp_enqueue_style('apiosys-honeypot-cf7');
