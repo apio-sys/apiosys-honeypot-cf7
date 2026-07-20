@@ -94,7 +94,8 @@ prefer making the field name configurable the same way.
 keywords+phrases), `message_field_names`, `email_field_names`,
 `text_field_names` (extra fields to scan), `disallow_message_links`,
 `enable_scoring`, `spam_score_threshold`, `enable_free_email_signal`,
-`free_email_domains`.
+`free_email_domains`, `company_field_names`, `enable_company_email_mismatch`,
+`enable_work_email_validation`, `work_email_message`.
 
 `spam_phrases` is **removed** as of 1.0.0; `apiosys_honeypot_cf7_maybe_migrate()`
 folds any legacy value into `spam_keywords` once, on `admin_init`.
@@ -121,9 +122,9 @@ When you add a setting: (1) add a default in
 
 The version appears in **three** places that must stay in sync:
 1. `Version:` header in `apiosys-honeypot-cf7.php`,
-2. the CSS version string in `wp_register_style()` (currently `1.0.1`),
+2. the CSS version string in `wp_register_style()` (currently `1.0.2`),
 3. `Stable tag:` in `readme.txt`.
 
 Also update the `== Changelog ==` section in `readme.txt` (this is the canonical
 changelog) and bump `Tested up to:` when validated against a new WP release.
-Current version: **1.0.1** (ship further fixes as 1.0.2, etc.).
+Current version: **1.0.2** (ship further fixes as 1.0.3, etc.).

@@ -3,7 +3,7 @@
  * Plugin Name: Apio systems - Honeypot for Contact Form 7
  * Plugin URI: https://apio.systems
  * Description: Advanced Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes multiple honeypot fields, checkbox trap, time-based validation, and comprehensive content analysis. Store results in Flamingo.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Joris Le Blansch
  * Author URI: https://www.apio.systems
  * License: MIT
@@ -85,6 +85,28 @@ function apiosys_honeypot_cf7_has_link($text) {
     return false;
 }
 
+// Whether an email address uses one of the configured free/personal providers
+// (gmail.com, hotmail.com, ...). Matches the exact domain or any subdomain of it.
+function apiosys_honeypot_cf7_is_free_email($email) {
+    if (!is_string($email) || strpos($email, '@') === false) {
+        return false;
+    }
+    $parts = explode('@', strtolower($email));
+    $domain = end($parts);
+    if ($domain === '') {
+        return false;
+    }
+    $free_list = array_filter(array_map('trim', explode("\n", strtolower(
+        apiosys_honeypot_cf7_get_option('free_email_domains', '')
+    ))));
+    foreach ($free_list as $free_domain) {
+        if ($domain === $free_domain || substr($domain, -strlen('.' . $free_domain)) === '.' . $free_domain) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Get default settings
 function apiosys_honeypot_cf7_default_settings() {
     return array(
@@ -105,7 +127,11 @@ function apiosys_honeypot_cf7_default_settings() {
         'enable_scoring' => 1,
         'spam_score_threshold' => 3,
         'enable_free_email_signal' => 1,
-        'free_email_domains' => "gmail.com\ngooglemail.com\nyahoo.com\nyahoo.co.uk\nymail.com\nhotmail.com\nhotmail.co.uk\noutlook.com\nlive.com\nmsn.com\naol.com\nicloud.com\nme.com\nmac.com\ngmx.com\ngmx.net\nmail.com\nmail.ru\nprotonmail.com\nproton.me\nyandex.com\nyandex.ru\nzoho.com\ntutanota.com\ninbox.com\nfastmail.com"
+        'free_email_domains' => "gmail.com\ngooglemail.com\nyahoo.com\nyahoo.co.uk\nymail.com\nhotmail.com\nhotmail.co.uk\noutlook.com\nlive.com\nmsn.com\naol.com\nicloud.com\nme.com\nmac.com\ngmx.com\ngmx.net\nmail.com\nmail.ru\nprotonmail.com\nproton.me\nyandex.com\nyandex.ru\nzoho.com\ntutanota.com\ninbox.com\nfastmail.com",
+        'company_field_names' => "company-name\ncompany\nyour-company\norganization\norganisation\nbusiness\nbusiness-name",
+        'enable_company_email_mismatch' => 0,
+        'enable_work_email_validation' => 0,
+        'work_email_message' => ''
     );
 }
 
@@ -174,6 +200,10 @@ function apiosys_honeypot_cf7_sanitize_settings($input) {
     $sanitized['spam_score_threshold'] = isset($input['spam_score_threshold']) ? max(1, absint($input['spam_score_threshold'])) : 3;
     $sanitized['enable_free_email_signal'] = isset($input['enable_free_email_signal']) ? 1 : 0;
     $sanitized['free_email_domains'] = isset($input['free_email_domains']) ? sanitize_textarea_field($input['free_email_domains']) : '';
+    $sanitized['company_field_names'] = isset($input['company_field_names']) ? sanitize_textarea_field($input['company_field_names']) : '';
+    $sanitized['enable_company_email_mismatch'] = isset($input['enable_company_email_mismatch']) ? 1 : 0;
+    $sanitized['enable_work_email_validation'] = isset($input['enable_work_email_validation']) ? 1 : 0;
+    $sanitized['work_email_message'] = isset($input['work_email_message']) ? sanitize_text_field($input['work_email_message']) : '';
     return $sanitized;
 }
 
@@ -354,7 +384,7 @@ function apiosys_honeypot_cf7_settings_page() {
                 </tr>
                 <tr>
                     <th colspan="2">
-                        <p class="description" style="font-weight:normal;max-width:40em;"><?php esc_html_e('Catches "human-looking" spam that passes every individual check. Each weak signal below adds points; a submission is marked as spam only when the total reaches the threshold. Signals include: link in the message, link in another field, free/disposable email provider, gmail dot/plus alias tricks, random digits in the email name, a very short message, "Name &amp; Name Services" company patterns, and no JavaScript detected.', 'apiosys-honeypot-cf7'); ?></p>
+                        <p class="description" style="font-weight:normal;max-width:40em;"><?php esc_html_e('Catches "human-looking" spam that passes every individual check. Each weak signal below adds points; a submission is marked as spam only when the total reaches the threshold. Signals include: link in the message, link in another field, free/disposable email provider, gmail plus-alias tricks, random digits in the email name, a very short message, "Name &amp; Name Services" company patterns, a company name paired with a free email, and no JavaScript detected.', 'apiosys-honeypot-cf7'); ?></p>
                     </th>
                 </tr>
                 <tr>
@@ -390,7 +420,51 @@ function apiosys_honeypot_cf7_settings_page() {
                     </th>
                     <td>
                         <textarea id="free_email_domains" name="apiosys_honeypot_cf7_settings[free_email_domains]" rows="6" class="large-text code"><?php echo esc_textarea($options['free_email_domains']); ?></textarea>
-                        <p class="description"><?php esc_html_e('One domain per line (e.g., gmail.com). Used only by the scoring signal above.', 'apiosys-honeypot-cf7'); ?></p>
+                        <p class="description"><?php esc_html_e('One domain per line (e.g., gmail.com). Used by the free-email signal, the company + free-email signal, and the work-email requirement below.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="enable_company_email_mismatch"><?php esc_html_e('Company Name + Free Email as a Signal', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="checkbox" id="enable_company_email_mismatch" name="apiosys_honeypot_cf7_settings[enable_company_email_mismatch]" value="1" <?php checked($options['enable_company_email_mismatch'], 1); ?> />
+                        <p class="description"><?php esc_html_e('Add a point when a company/organization name is filled in but the email uses a free/personal provider (a real employee writes from the company domain, not gmail). Recommended for business (B2B) forms. Off by default, because sole traders legitimately use a personal email alongside a business name.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="company_field_names"><?php esc_html_e('Company / Organization Field Names', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <textarea id="company_field_names" name="apiosys_honeypot_cf7_settings[company_field_names]" rows="3" class="large-text"><?php echo esc_textarea($options['company_field_names']); ?></textarea>
+                        <p class="description"><?php esc_html_e('One field name per line. Used by the "Company Name + Free Email" signal above and by the work-email requirement below.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th colspan="2"><h2><?php esc_html_e('Work Email Requirement', 'apiosys-honeypot-cf7'); ?></h2></th>
+                </tr>
+                <tr>
+                    <th colspan="2">
+                        <p class="description" style="font-weight:normal;max-width:40em;"><?php esc_html_e('A friendly, opt-in alternative to silent scoring. When a visitor fills in a company/organization name but enters a free/personal email, Contact Form 7 shows a validation message asking for a work address instead of accepting the submission. Legitimate visitors simply re-enter a business email; nothing is stored. Uses the same company field names and free-email list above.', 'apiosys-honeypot-cf7'); ?></p>
+                    </th>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="enable_work_email_validation"><?php esc_html_e('Require a Work Email When a Company Is Given', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="checkbox" id="enable_work_email_validation" name="apiosys_honeypot_cf7_settings[enable_work_email_validation]" value="1" <?php checked($options['enable_work_email_validation'], 1); ?> />
+                        <p class="description"><?php esc_html_e('Off by default. When on, a company name paired with a free/personal email fails validation with the friendly message below.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="work_email_message"><?php esc_html_e('Work Email Message', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="text" id="work_email_message" name="apiosys_honeypot_cf7_settings[work_email_message]" value="<?php echo esc_attr($options['work_email_message']); ?>" class="large-text" placeholder="<?php esc_attr_e('Please use your work or business email address so we can respond to your enquiry.', 'apiosys-honeypot-cf7'); ?>" />
+                        <p class="description"><?php esc_html_e('Shown next to the email field when a work email is required. Leave blank to use the default message.', 'apiosys-honeypot-cf7'); ?></p>
                     </td>
                 </tr>
             </table>
@@ -813,22 +887,15 @@ function apiosys_honeypot_cf7_scoring($spam, $submission) {
     }
 
     // Email-based signals
+    $email_is_free = apiosys_honeypot_cf7_is_free_email($email);
     if ($email !== '' && strpos($email, '@') !== false) {
         $email_parts = explode('@', strtolower($email));
         $local = $email_parts[0];
         $domain = end($email_parts);
 
-        if (apiosys_honeypot_cf7_get_option('enable_free_email_signal', 1)) {
-            $free_list = array_filter(array_map('trim', explode("\n", strtolower(
-                apiosys_honeypot_cf7_get_option('free_email_domains', '')
-            ))));
-            foreach ($free_list as $free_domain) {
-                if ($domain === $free_domain || substr($domain, -strlen('.' . $free_domain)) === '.' . $free_domain) {
-                    $score += 1;
-                    $reasons[] = 'free email provider';
-                    break;
-                }
-            }
+        if ($email_is_free && apiosys_honeypot_cf7_get_option('enable_free_email_signal', 1)) {
+            $score += 1;
+            $reasons[] = 'free email provider';
         }
 
         // Gmail plus-address alias trick (e.g. name+tag@gmail.com). Plain dots are
@@ -856,12 +923,26 @@ function apiosys_honeypot_cf7_scoring($spam, $submission) {
     }
 
     // "Name & Name Services/Ltd/LLC..." company pattern
-    $company = apiosys_honeypot_cf7_first_field($data, "company-name\ncompany\nyour-company\norganization");
+    $company = apiosys_honeypot_cf7_first_field(
+        $data,
+        apiosys_honeypot_cf7_get_option('company_field_names', '')
+    );
     if ($company !== '' &&
         preg_match('/\S+\s+&\s+\S+/u', $company) &&
         preg_match('/\b(services|solutions|group|consult|marketing|agency|ltd|llc|inc|gbr|gmbh|ag|co)\b/i', $company)) {
         $score += 1;
         $reasons[] = 'company name pattern';
+    }
+
+    // Corporate identity claimed (a company/organization name was filled in) but a
+    // personal/free mailbox was used. A genuine employee of a named company writes
+    // from the company domain, not gmail/hotmail. Weak on its own — it pairs with the
+    // free-email and short-message signals to tip an otherwise human-looking submission
+    // (e.g. "Sodexo" + a random gmail address + a one-line message).
+    if ($company !== '' && $email_is_free &&
+        apiosys_honeypot_cf7_get_option('enable_company_email_mismatch', 0)) {
+        $score += 1;
+        $reasons[] = 'company name with free email';
     }
 
     // No JavaScript marker (bots that do not execute JS never set this field)
@@ -946,11 +1027,64 @@ function apiosys_honeypot_cf7_field_pattern_analysis($spam, $submission) {
     return $spam;
 }
 
+// Friendly "please use your work email" nudge (opt-in). When the visitor fills in a
+// company/organization name but submits a free/personal email, CF7 validation asks
+// them to correct it instead of the plugin silently accepting (and later scoring) the
+// message. Nothing is stored and legitimate visitors simply re-enter a work address.
+// Runs on both optional and required email tags.
+add_filter('wpcf7_validate_email', 'apiosys_honeypot_cf7_work_email_validation', 20, 2);
+add_filter('wpcf7_validate_email*', 'apiosys_honeypot_cf7_work_email_validation', 20, 2);
+function apiosys_honeypot_cf7_work_email_validation($result, $tag) {
+    if (!apiosys_honeypot_cf7_get_option('enable_work_email_validation', 0)) {
+        return $result;
+    }
+
+    $name = isset($tag->name) ? $tag->name : '';
+    // CF7 verifies its own submission nonce before validation runs.
+    // phpcs:disable WordPress.Security.NonceVerification.Missing
+    if ($name === '' || !isset($_POST[$name])) {
+        return $result;
+    }
+    $email = sanitize_text_field(wp_unslash($_POST[$name]));
+    if ($email === '' || !apiosys_honeypot_cf7_is_free_email($email)) {
+        return $result;
+    }
+
+    // Only nudge when a company/organization name was also provided.
+    $company = '';
+    $company_fields = array_filter(array_map('trim', explode("\n",
+        apiosys_honeypot_cf7_get_option('company_field_names', '')
+    )));
+    foreach ($company_fields as $field) {
+        if (isset($_POST[$field]) && $_POST[$field] !== '') {
+            $value = sanitize_text_field(
+                apiosys_honeypot_cf7_stringify(wp_unslash($_POST[$field]))
+            );
+            if (trim($value) !== '') {
+                $company = $value;
+                break;
+            }
+        }
+    }
+    // phpcs:enable WordPress.Security.NonceVerification.Missing
+    if ($company === '') {
+        return $result;
+    }
+
+    $message = apiosys_honeypot_cf7_get_option('work_email_message', '');
+    if (trim($message) === '') {
+        $message = __('Please use your work or business email address so we can respond to your enquiry.', 'apiosys-honeypot-cf7');
+    }
+    $result->invalidate($tag, $message);
+
+    return $result;
+}
+
 // Enqueue frontend styles using WordPress best practices
 add_action('wp_enqueue_scripts', 'apiosys_honeypot_cf7_enqueue_styles');
 function apiosys_honeypot_cf7_enqueue_styles() {
     // Register the style handle (no file needed for inline-only styles)
-    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.1');
+    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.2');
     
     // Enqueue the registered style
     wp_enqueue_style('apiosys-honeypot-cf7');
