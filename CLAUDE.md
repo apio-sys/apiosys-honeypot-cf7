@@ -121,10 +121,11 @@ When you add a setting: (1) add a default in
 ## Releasing / versioning
 
 The version appears in **three** places that must stay in sync:
-1. `Version:` header in `apiosys-honeypot-cf7.php`,
-2. the CSS version string in `wp_register_style()` (currently `1.0.2`),
+1. `Version:` header in `apiosys-honeypot-cf7.php` (the single source of truth —
+   there is intentionally no `@version` docblock tag to duplicate it),
+2. the CSS version string in `wp_register_style()` (currently `1.0.3`),
 3. `Stable tag:` in `readme.txt`.
 
 Also update the `== Changelog ==` section in `readme.txt` (this is the canonical
 changelog) and bump `Tested up to:` when validated against a new WP release.
-Current version: **1.0.2** (ship further fixes as 1.0.3, etc.).
+Current version: **1.0.3** (ship further fixes as 1.0.4, etc.).

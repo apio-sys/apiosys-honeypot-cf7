@@ -3,7 +3,7 @@ Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 7.0
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -57,6 +57,10 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 1.0.3 - 2026-07-20 =
+* FIX: Removed a redundant `@version` docblock tag from the main plugin file that had drifted out of sync with the `Version:` header. The mismatch could stop some WordPress installs from recognizing the update; the `Version:` header is now the single source of truth.
+* FIX: Sanitize the company-name POST value before comparison so no non-sanitized input is read (resolves a Plugin Check / WPCS ValidatedSanitizedInput warning). No behavior change.
+
 = 1.0.2 - 2026-07-20 =
 * FEAT: New "Company Name + Free Email" scoring signal - adds a point when a company/organization name is filled in but a free/personal email (gmail, hotmail...) is used. Catches human-looking spam that claims a corporate identity while writing from a throwaway mailbox. Off by default; recommended for business (B2B) forms.
 * FEAT: New opt-in "Work Email Requirement" - a friendly Contact Form 7 validation message that asks the visitor for a work address when they provide a company name but a free/personal email, instead of silently accepting the submission. Message is customizable.

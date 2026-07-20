@@ -3,7 +3,7 @@
  * Plugin Name: Apio systems - Honeypot for Contact Form 7
  * Plugin URI: https://apio.systems
  * Description: Advanced Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes multiple honeypot fields, checkbox trap, time-based validation, and comprehensive content analysis. Store results in Flamingo.
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Joris Le Blansch
  * Author URI: https://www.apio.systems
  * License: MIT
@@ -12,8 +12,6 @@
  * Requires at least: 6.5
  * Requires PHP: 7.2
  * Requires Plugins: contact-form-7, flamingo
- *
- * @version 1.0.0
  */
 
 // If this file is called directly, abort.
@@ -1056,14 +1054,15 @@ function apiosys_honeypot_cf7_work_email_validation($result, $tag) {
         apiosys_honeypot_cf7_get_option('company_field_names', '')
     )));
     foreach ($company_fields as $field) {
-        if (isset($_POST[$field]) && $_POST[$field] !== '') {
-            $value = sanitize_text_field(
-                apiosys_honeypot_cf7_stringify(wp_unslash($_POST[$field]))
-            );
-            if (trim($value) !== '') {
-                $company = $value;
-                break;
-            }
+        if (!isset($_POST[$field])) {
+            continue;
+        }
+        $value = sanitize_text_field(
+            apiosys_honeypot_cf7_stringify(wp_unslash($_POST[$field]))
+        );
+        if (trim($value) !== '') {
+            $company = $value;
+            break;
         }
     }
     // phpcs:enable WordPress.Security.NonceVerification.Missing
@@ -1084,7 +1083,7 @@ function apiosys_honeypot_cf7_work_email_validation($result, $tag) {
 add_action('wp_enqueue_scripts', 'apiosys_honeypot_cf7_enqueue_styles');
 function apiosys_honeypot_cf7_enqueue_styles() {
     // Register the style handle (no file needed for inline-only styles)
-    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.2');
+    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.3');
     
     // Enqueue the registered style
     wp_enqueue_style('apiosys-honeypot-cf7');
