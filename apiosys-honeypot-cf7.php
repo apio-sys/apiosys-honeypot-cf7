@@ -3,7 +3,7 @@
  * Plugin Name: Apio systems - Honeypot for Contact Form 7
  * Plugin URI: https://apio.systems
  * Description: Advanced Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes multiple honeypot fields, checkbox trap, time-based validation, and comprehensive content analysis. Store results in Flamingo.
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Joris Le Blansch
  * Author URI: https://www.apio.systems
  * License: MIT
@@ -83,6 +83,83 @@ function apiosys_honeypot_cf7_has_link($text) {
     return false;
 }
 
+// Extract the host of every http/https/www. link in a string. Hosts are returned
+// lowercase with any userinfo, port, leading "www." and trailing sentence
+// punctuation removed. Bare domains (example.com with no scheme) are deliberately
+// ignored, so this counts exactly what the URL limit has always counted.
+function apiosys_honeypot_cf7_link_hosts($text) {
+    if (!is_string($text) || $text === '') {
+        return array();
+    }
+    if (!preg_match_all('#(?:https?://|www\.)([^\s/?\#]*)#i', $text, $matches)) {
+        return array();
+    }
+    $hosts = array();
+    foreach ($matches[1] as $host) {
+        $host = strtolower($host);
+        // Drop userinfo (user:pass@host) and any port
+        $at = strrpos($host, '@');
+        if ($at !== false) {
+            $host = substr($host, $at + 1);
+        }
+        $colon = strpos($host, ':');
+        if ($colon !== false) {
+            $host = substr($host, 0, $colon);
+        }
+        // A full stop or bracket after a URL belongs to the sentence, not the host
+        $host = rtrim($host, ".,;:!?)]}'\"");
+        if (strpos($host, 'www.') === 0) {
+            $host = substr($host, 4);
+        }
+        if ($host !== '' && strpos($host, '.') !== false) {
+            $hosts[] = $host;
+        }
+    }
+    return $hosts;
+}
+
+// Domain part of an email address, lowercase ('' when there is no @)
+function apiosys_honeypot_cf7_email_domain($email) {
+    if (!is_string($email) || strpos($email, '@') === false) {
+        return '';
+    }
+    $parts = explode('@', strtolower(trim($email)));
+    return end($parts);
+}
+
+// Whether $host is $domain or a subdomain of it. Deliberately an exact
+// registrable-domain comparison: "driveamble.com" does NOT match a sender at
+// "amble.pt", and "gmail-verify.com" does not match a sender at "gmail.com".
+function apiosys_honeypot_cf7_domain_matches($host, $domain) {
+    if ($host === '' || $domain === '') {
+        return false;
+    }
+    return ($host === $domain || substr($host, -strlen('.' . $domain)) === '.' . $domain);
+}
+
+// Distinct link domains in a message, honouring the sender-domain allowlist.
+// Two things keep ordinary business enquiries out of the net: repeated links to
+// the same host count once (a site named in the body and again in a signature is
+// one link, not two), and links to the sender's own email domain are free.
+function apiosys_honeypot_cf7_count_link_domains($message, $email) {
+    $hosts = apiosys_honeypot_cf7_link_hosts($message);
+    if (empty($hosts)) {
+        return array();
+    }
+    $sender_domain = '';
+    if (apiosys_honeypot_cf7_get_option('allow_sender_domain_links', 1)) {
+        $sender_domain = apiosys_honeypot_cf7_email_domain($email);
+    }
+    $domains = array();
+    foreach ($hosts as $host) {
+        if ($sender_domain !== '' && apiosys_honeypot_cf7_domain_matches($host, $sender_domain)) {
+            continue;
+        }
+        $domains[$host] = true;
+    }
+    return array_keys($domains);
+}
+
 // Whether an email address uses one of the configured free/personal providers
 // (gmail.com, hotmail.com, ...). Matches the exact domain or any subdomain of it.
 function apiosys_honeypot_cf7_is_free_email($email) {
@@ -122,6 +199,9 @@ function apiosys_honeypot_cf7_default_settings() {
         'email_field_names' => "your-email\nemail\nyour-mail\nmail",
         'text_field_names' => "your-name\nfirst-name\nlast-name\nname\nfull-name\ncompany-name\ncompany\nyour-company\norganization\njob-title\njob\nposition\nyour-subject\nsubject",
         'disallow_message_links' => 0,
+        'allow_sender_domain_links' => 1,
+        'enable_link_limit_validation' => 0,
+        'link_limit_message' => '',
         'enable_scoring' => 1,
         'spam_score_threshold' => 3,
         'enable_free_email_signal' => 1,
@@ -194,6 +274,9 @@ function apiosys_honeypot_cf7_sanitize_settings($input) {
     $sanitized['email_field_names'] = sanitize_textarea_field($input['email_field_names']);
     $sanitized['text_field_names'] = isset($input['text_field_names']) ? sanitize_textarea_field($input['text_field_names']) : '';
     $sanitized['disallow_message_links'] = isset($input['disallow_message_links']) ? 1 : 0;
+    $sanitized['allow_sender_domain_links'] = isset($input['allow_sender_domain_links']) ? 1 : 0;
+    $sanitized['enable_link_limit_validation'] = isset($input['enable_link_limit_validation']) ? 1 : 0;
+    $sanitized['link_limit_message'] = isset($input['link_limit_message']) ? sanitize_text_field($input['link_limit_message']) : '';
     $sanitized['enable_scoring'] = isset($input['enable_scoring']) ? 1 : 0;
     $sanitized['spam_score_threshold'] = isset($input['spam_score_threshold']) ? max(1, absint($input['spam_score_threshold'])) : 3;
     $sanitized['enable_free_email_signal'] = isset($input['enable_free_email_signal']) ? 1 : 0;
@@ -338,7 +421,7 @@ function apiosys_honeypot_cf7_settings_page() {
                     </th>
                     <td>
                         <input type="number" id="max_urls" name="apiosys_honeypot_cf7_settings[max_urls]" value="<?php echo esc_attr($options['max_urls']); ?>" min="0" max="10" class="small-text" />
-                        <p class="description"><?php esc_html_e('Messages with more URLs than this will be marked as spam (http/https and www. links are counted)', 'apiosys-honeypot-cf7'); ?></p>
+                        <p class="description"><?php esc_html_e('Messages linking to more different websites than this will be marked as spam. Distinct domains are counted, not link occurrences, so the same site mentioned in the body and again in a signature counts once (http/https and www. links are counted).', 'apiosys-honeypot-cf7'); ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -348,6 +431,33 @@ function apiosys_honeypot_cf7_settings_page() {
                     <td>
                         <input type="checkbox" id="disallow_message_links" name="apiosys_honeypot_cf7_settings[disallow_message_links]" value="1" <?php checked($options['disallow_message_links'], 1); ?> />
                         <p class="description"><?php esc_html_e('When enabled, any link in the message marks it as spam (overrides the number above). Useful if your forms never need links from visitors.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="allow_sender_domain_links"><?php esc_html_e('Allow Links to the Sender\'s Own Domain', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="checkbox" id="allow_sender_domain_links" name="apiosys_honeypot_cf7_settings[allow_sender_domain_links]" value="1" <?php checked($options['allow_sender_domain_links'], 1); ?> />
+                        <p class="description"><?php esc_html_e('On by default. Links whose domain matches the sender\'s email domain do not count towards the limit above, so someone writing from jane@example.com may link to example.com freely. The match is exact (or a subdomain): a sender at example.com does not unlock example-deals.com.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="enable_link_limit_validation"><?php esc_html_e('Ask the Visitor to Remove Extra Links', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="checkbox" id="enable_link_limit_validation" name="apiosys_honeypot_cf7_settings[enable_link_limit_validation]" value="1" <?php checked($options['enable_link_limit_validation'], 1); ?> />
+                        <p class="description"><?php esc_html_e('Off by default. When on, a message over the link limit fails validation with the friendly message below, shown beside the message field, instead of failing with Contact Form 7\'s generic error. The visitor can remove a link and send again. Note: submissions stopped this way are not saved to Flamingo at all, so if the visitor gives up you will not see the enquiry.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="link_limit_message"><?php esc_html_e('Link Limit Message', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="text" id="link_limit_message" name="apiosys_honeypot_cf7_settings[link_limit_message]" value="<?php echo esc_attr($options['link_limit_message']); ?>" class="large-text" placeholder="<?php esc_attr_e('Your message links to more websites than we can accept. Please link to at most 1 website and send again.', 'apiosys-honeypot-cf7'); ?>" />
+                        <p class="description"><?php esc_html_e('Shown next to the message field when the link limit is reached. Leave blank to use the default message, which names your current limit.', 'apiosys-honeypot-cf7'); ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -735,11 +845,18 @@ function apiosys_honeypot_cf7_content_analysis($spam, $submission) {
 
     // Checks 1-3, 6-7 apply to the main message field specifically
     if ($message !== '') {
-        // 1. Excessive or disallowed URLs (counts http/https and www. links)
+        // 1. Excessive or disallowed URLs. Counts distinct link domains (http/https
+        // and www. links), so the same site repeated in body and signature is one
+        // link; links to the sender's own email domain are skipped entirely.
         $max_urls = apiosys_honeypot_cf7_get_option('max_urls', 2);
         $disallow_links = apiosys_honeypot_cf7_get_option('disallow_message_links', 0);
-        $url_count = preg_match_all('/(?:https?:\/\/|www\.)[^\s]+/i', $message);
-        if ($disallow_links && $url_count > 0) {
+        $link_email = apiosys_honeypot_cf7_first_field(
+            $data,
+            apiosys_honeypot_cf7_get_option('email_field_names', "your-email\nemail")
+        );
+        $link_domains = apiosys_honeypot_cf7_count_link_domains($message, $link_email);
+        $domain_count = count($link_domains);
+        if ($disallow_links && $domain_count > 0) {
             $spam = true;
             $submission->add_spam_log(array(
                 'agent' => 'content-analysis',
@@ -747,12 +864,12 @@ function apiosys_honeypot_cf7_content_analysis($spam, $submission) {
             ));
             return $spam;
         }
-        if ($url_count > $max_urls) {
+        if ($domain_count > $max_urls) {
             $spam = true;
             $submission->add_spam_log(array(
                 'agent' => 'content-analysis',
-                /* translators: 1: number of URLs found, 2: maximum number allowed */
-                'reason' => sprintf(__('Too many URLs in message (%1$d found, max %2$d allowed)', 'apiosys-honeypot-cf7'), $url_count, $max_urls)
+                /* translators: 1: number of distinct link domains found, 2: maximum number allowed */
+                'reason' => sprintf(__('Too many URLs in message (%1$d domains found, max %2$d allowed)', 'apiosys-honeypot-cf7'), $domain_count, $max_urls)
             ));
             return $spam;
         }
@@ -1057,8 +1174,11 @@ function apiosys_honeypot_cf7_work_email_validation($result, $tag) {
         if (!isset($_POST[$field])) {
             continue;
         }
-        $value = sanitize_text_field(
-            apiosys_honeypot_cf7_stringify(wp_unslash($_POST[$field]))
+        // map_deep sanitizes each element before the array is flattened, so
+        // checkbox/multi values are covered and the sanitizer is applied directly
+        // to the superglobal (which is also what WPCS can verify).
+        $value = apiosys_honeypot_cf7_stringify(
+            map_deep(wp_unslash($_POST[$field]), 'sanitize_text_field')
         );
         if (trim($value) !== '') {
             $company = $value;
@@ -1079,11 +1199,113 @@ function apiosys_honeypot_cf7_work_email_validation($result, $tag) {
     return $result;
 }
 
+// Friendly "too many links" notice (opt-in). The link limit is one of the few rules
+// a genuine visitor can actually satisfy, so rather than failing with CF7's generic
+// spam response ("An error has occurred, please try later"), Contact Form 7 shows an
+// actionable message beside the message field and the visitor removes a link and
+// resends. Validation runs before the spam pipeline, so a submission stopped here is
+// NOT recorded in Flamingo - that is the trade-off for the clearer message.
+add_filter('wpcf7_validate_textarea', 'apiosys_honeypot_cf7_link_limit_validation', 20, 2);
+add_filter('wpcf7_validate_textarea*', 'apiosys_honeypot_cf7_link_limit_validation', 20, 2);
+add_filter('wpcf7_validate_text', 'apiosys_honeypot_cf7_link_limit_validation', 20, 2);
+add_filter('wpcf7_validate_text*', 'apiosys_honeypot_cf7_link_limit_validation', 20, 2);
+function apiosys_honeypot_cf7_link_limit_validation($result, $tag) {
+    if (!apiosys_honeypot_cf7_get_option('enable_link_limit_validation', 0)) {
+        return $result;
+    }
+
+    $name = isset($tag->name) ? $tag->name : '';
+    // CF7 verifies its own submission nonce before validation runs.
+    // phpcs:disable WordPress.Security.NonceVerification.Missing
+    if ($name === '' || !isset($_POST[$name])) {
+        return $result;
+    }
+
+    // Only check the field the spam pipeline would examine: the first non-empty name
+    // in message_field_names. Without this, a link in the subject line could fail
+    // validation even though the spam check never looked at it.
+    $active = '';
+    $message_fields = array_filter(array_map('trim', explode("\n",
+        apiosys_honeypot_cf7_get_option('message_field_names', "your-message\nmessage\nyour-comment\ncomment")
+    )));
+    foreach ($message_fields as $field) {
+        if (!isset($_POST[$field])) {
+            continue;
+        }
+        $value = apiosys_honeypot_cf7_stringify(
+            map_deep(wp_unslash($_POST[$field]), 'sanitize_text_field')
+        );
+        if (trim($value) !== '') {
+            $active = $field;
+            break;
+        }
+    }
+    if ($active === '' || $active !== $name) {
+        return $result;
+    }
+
+    $message = apiosys_honeypot_cf7_stringify(
+        map_deep(wp_unslash($_POST[$name]), 'sanitize_textarea_field')
+    );
+
+    // Sender address, so links to the visitor's own domain stay free
+    $email = '';
+    $email_fields = array_filter(array_map('trim', explode("\n",
+        apiosys_honeypot_cf7_get_option('email_field_names', "your-email\nemail")
+    )));
+    foreach ($email_fields as $field) {
+        if (!isset($_POST[$field])) {
+            continue;
+        }
+        $value = apiosys_honeypot_cf7_stringify(
+            map_deep(wp_unslash($_POST[$field]), 'sanitize_text_field')
+        );
+        if (trim($value) !== '') {
+            $email = $value;
+            break;
+        }
+    }
+    // phpcs:enable WordPress.Security.NonceVerification.Missing
+
+    $max_urls = (int) apiosys_honeypot_cf7_get_option('max_urls', 2);
+    $no_links = apiosys_honeypot_cf7_get_option('disallow_message_links', 0) || $max_urls < 1;
+    $domain_count = count(apiosys_honeypot_cf7_count_link_domains($message, $email));
+
+    if ($no_links) {
+        if ($domain_count < 1) {
+            return $result;
+        }
+    } elseif ($domain_count <= $max_urls) {
+        return $result;
+    }
+
+    $notice = apiosys_honeypot_cf7_get_option('link_limit_message', '');
+    if (trim($notice) === '') {
+        if ($no_links) {
+            $notice = __('Please remove the web links from your message — we are unable to accept links here.', 'apiosys-honeypot-cf7');
+        } else {
+            $notice = sprintf(
+                /* translators: %d: maximum number of different websites that may be linked */
+                _n(
+                    'Your message links to more websites than we can accept. Please link to at most %d website and send again.',
+                    'Your message links to more websites than we can accept. Please link to at most %d websites and send again.',
+                    $max_urls,
+                    'apiosys-honeypot-cf7'
+                ),
+                $max_urls
+            );
+        }
+    }
+    $result->invalidate($tag, $notice);
+
+    return $result;
+}
+
 // Enqueue frontend styles using WordPress best practices
 add_action('wp_enqueue_scripts', 'apiosys_honeypot_cf7_enqueue_styles');
 function apiosys_honeypot_cf7_enqueue_styles() {
     // Register the style handle (no file needed for inline-only styles)
-    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.3');
+    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.4');
     
     // Enqueue the registered style
     wp_enqueue_style('apiosys-honeypot-cf7');

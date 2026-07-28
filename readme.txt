@@ -3,7 +3,7 @@ Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 7.0
-Stable tag: 1.0.3
+Stable tag: 1.0.4
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -57,6 +57,13 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 1.0.4 - 2026-07-28 =
+* FIX: The URL limit counted every link occurrence, so a normal business enquiry that named the sender's own website once in the body and again in a signature was counted as two links and marked as spam. Distinct link domains are now counted instead, so the same site repeated in one message counts once. This resolves a confirmed false positive.
+* NEW: "Allow Links to the Sender's Own Domain" (on by default). Links whose domain matches the sender's email domain no longer count towards the URL limit, so someone writing from jane@example.com may link to example.com freely. The match is exact or a subdomain, so a sender at example.com does not unlock example-deals.com.
+* NEW: "Ask the Visitor to Remove Extra Links" (off by default). When enabled, a message over the link limit fails Contact Form 7 validation with a friendly, editable message shown beside the message field, instead of Contact Form 7's generic "an error occurred" spam response. The visitor can remove a link and send again. Note that submissions stopped this way are not stored in Flamingo at all, unlike submissions caught by the spam checks.
+* NEW: "Link Limit Message" setting to customize the text of that notice; leave it blank to use the built-in default, which names your configured limit.
+* FIX: Resolved a Plugin Check / WPCS `ValidatedSanitizedInput.InputNotSanitized` warning left over from 1.0.2's work-email validation. The POST value was sanitized, but through a wrapper function that the sniff cannot follow. Sanitizing is now applied directly to the input via `map_deep()`, which also sanitizes each element of multi-value fields individually rather than after flattening. No behavior change for ordinary text fields.
+
 = 1.0.3 - 2026-07-20 =
 * FIX: Removed a redundant `@version` docblock tag from the main plugin file that had drifted out of sync with the `Version:` header. The mismatch could stop some WordPress installs from recognizing the update; the `Version:` header is now the single source of truth.
 * FIX: Sanitize the company-name POST value before comparison so no non-sanitized input is read (resolves a Plugin Check / WPCS ValidatedSanitizedInput warning). No behavior change.

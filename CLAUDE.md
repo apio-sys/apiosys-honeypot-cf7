@@ -55,6 +55,8 @@ the first failing check wins and later checks are skipped. Each failure calls
 4. `apiosys_honeypot_cf7_email_domain_check` (10) — email TLD against the
    suspicious-TLD list (toggleable).
 5. `apiosys_honeypot_cf7_content_analysis` (10) — **hard blocks.** URL/link count
+   (counted as **distinct link domains**, not occurrences, with links to the
+   sender's own email domain skipped when `allow_sender_domain_links` is on)
    and uppercase %, min word count, repetitive patterns and **whitespace/blank-line
    flooding**, excessive special characters (all on the message field); plus a
    single merged **keyword/phrase** scan run across the message **and** the extra
@@ -72,13 +74,33 @@ the first failing check wins and later checks are skipped. Each failure calls
    spam when the total reaches `spam_score_threshold`. This is what catches
    "human-looking" spam that no single rule would.
 
+### Friendly validation nudges (opt-in, run *before* the spam pipeline)
+Both hook `wpcf7_validate_*` at priority 20 and call `$result->invalidate($tag, $msg)`.
+CF7 runs validation before `wpcf7_spam`, so **a submission stopped here never
+reaches the spam checks and is never stored in Flamingo** — unlike a spam block.
+Both are default-off with a configurable message that falls back to a built-in
+string when left blank.
+
+- `apiosys_honeypot_cf7_work_email_validation` — company name + free/personal
+  email (`enable_work_email_validation`, `work_email_message`).
+- `apiosys_honeypot_cf7_link_limit_validation` — message over the link limit
+  (`enable_link_limit_validation`, `link_limit_message`). Only validates the
+  field `first_field()` would pick from `message_field_names`, so validation and
+  `content_analysis` can never disagree about which field to inspect.
+
 ### Shared helpers
 `apiosys_honeypot_cf7_first_field()` (first non-empty of a field-name list),
 `apiosys_honeypot_cf7_collect_text()` (concatenate all matching fields),
 `apiosys_honeypot_cf7_stringify()` (array→string for checkbox/multi values),
 `apiosys_honeypot_cf7_normalize()` (lowercase + `remove_accents` + collapse
 punctuation, for keyword matching), `apiosys_honeypot_cf7_has_link()` (http/www/
-bare-domain detection). Use these instead of re-implementing field lookups.
+bare-domain detection), `apiosys_honeypot_cf7_link_hosts()` (hosts of all
+http/www links, normalized: no userinfo, port, `www.` or trailing punctuation),
+`apiosys_honeypot_cf7_email_domain()`, `apiosys_honeypot_cf7_domain_matches()`
+(exact-or-subdomain, deliberately not fuzzy), and
+`apiosys_honeypot_cf7_count_link_domains()` (distinct link domains after the
+sender-domain allowlist — the single source of truth shared by the spam check
+and the validation nudge). Use these instead of re-implementing field lookups.
 
 ### Configurable field-name lists
 The plugin does not assume fixed CF7 field names. `message_field_names` and
@@ -95,7 +117,9 @@ keywords+phrases), `message_field_names`, `email_field_names`,
 `text_field_names` (extra fields to scan), `disallow_message_links`,
 `enable_scoring`, `spam_score_threshold`, `enable_free_email_signal`,
 `free_email_domains`, `company_field_names`, `enable_company_email_mismatch`,
-`enable_work_email_validation`, `work_email_message`.
+`enable_work_email_validation`, `work_email_message`,
+`allow_sender_domain_links`, `enable_link_limit_validation`,
+`link_limit_message`.
 
 `spam_phrases` is **removed** as of 1.0.0; `apiosys_honeypot_cf7_maybe_migrate()`
 folds any legacy value into `spam_keywords` once, on `admin_init`.
@@ -128,4 +152,4 @@ The version appears in **three** places that must stay in sync:
 
 Also update the `== Changelog ==` section in `readme.txt` (this is the canonical
 changelog) and bump `Tested up to:` when validated against a new WP release.
-Current version: **1.0.3** (ship further fixes as 1.0.4, etc.).
+Current version: **1.0.4** (ship further fixes as 1.0.5, etc.).
