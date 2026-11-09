@@ -124,7 +124,8 @@ keywords+phrases), `message_field_names`, `email_field_names`,
 `spam_phrases` is **removed** as of 1.0.0; `apiosys_honeypot_cf7_maybe_migrate()`
 folds any legacy value into `spam_keywords` once, on `admin_init`.
 
-The admin UI lives under **Contact → Honeypot** (`add_submenu_page` on `wpcf7`).
+The admin UI lives under **Contact → Honeypot** (`add_submenu_page` on
+`wpcf7-dashboard` for CF7 6.2+, falling back to `wpcf7` for older CF7).
 When you add a setting: (1) add a default in
 `apiosys_honeypot_cf7_default_settings()`, (2) sanitize it in
 `apiosys_honeypot_cf7_sanitize_settings()`, (3) render a field in
@@ -147,9 +148,9 @@ When you add a setting: (1) add a default in
 The version appears in **three** places that must stay in sync:
 1. `Version:` header in `apiosys-honeypot-cf7.php` (the single source of truth —
    there is intentionally no `@version` docblock tag to duplicate it),
-2. the CSS version string in `wp_register_style()` (currently `1.0.3`),
+2. the CSS version string in `wp_register_style()` (currently `1.0.5`),
 3. `Stable tag:` in `readme.txt`.
 
 Also update the `== Changelog ==` section in `readme.txt` (this is the canonical
 changelog) and bump `Tested up to:` when validated against a new WP release.
-Current version: **1.0.4** (ship further fixes as 1.0.5, etc.).
+Current version: **1.0.5** (ship further fixes as 1.0.6, etc.).

@@ -3,7 +3,7 @@ Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 1.0.4
+Stable tag: 1.0.5
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -57,6 +57,9 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 1.0.5 - 2026-11-09 =
+* FIX: The Honeypot settings page disappeared from the Contact menu with Contact Form 7 6.2, which moved its top-level menu to a new slug (`wpcf7-dashboard`). The submenu now attaches to whichever Contact menu slug the installed Contact Form 7 version registers, so it shows again on 6.2+ and keeps working on older versions. The settings page URL is unchanged.
+
 = 1.0.4 - 2026-07-28 =
 * FIX: The URL limit counted every link occurrence, so a normal business enquiry that named the sender's own website once in the body and again in a signature was counted as two links and marked as spam. Distinct link domains are now counted instead, so the same site repeated in one message counts once. This resolves a confirmed false positive.
 * NEW: "Allow Links to the Sender's Own Domain" (on by default). Links whose domain matches the sender's email domain no longer count towards the URL limit, so someone writing from jane@example.com may link to example.com freely. The match is exact or a subdomain, so a sender at example.com does not unlock example-deals.com.

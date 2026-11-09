@@ -3,7 +3,7 @@
  * Plugin Name: Apio systems - Honeypot for Contact Form 7
  * Plugin URI: https://apio.systems
  * Description: Advanced Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes multiple honeypot fields, checkbox trap, time-based validation, and comprehensive content analysis. Store results in Flamingo.
- * Version: 1.0.4
+ * Version: 1.0.5
  * Author: Joris Le Blansch
  * Author URI: https://www.apio.systems
  * License: MIT
@@ -213,11 +213,19 @@ function apiosys_honeypot_cf7_default_settings() {
     );
 }
 
-// Add admin menu under Contact
+// Add admin menu under Contact.
+// CF7 6.2 moved its top-level "Contact" menu from the 'wpcf7' slug to
+// 'wpcf7-dashboard' ('wpcf7' is now the "Contact Forms" submenu item), which
+// orphaned a submenu registered under 'wpcf7'. CF7 registers its menu on
+// admin_menu priority 9, so at our priority 10 we can detect which top-level
+// slug actually exists and attach to it, staying compatible with older CF7.
 add_action('admin_menu', 'apiosys_honeypot_cf7_add_admin_menu');
 function apiosys_honeypot_cf7_add_admin_menu() {
+    global $admin_page_hooks;
+    $parent = isset($admin_page_hooks['wpcf7-dashboard']) ? 'wpcf7-dashboard' : 'wpcf7';
+
     add_submenu_page(
-        'wpcf7',
+        $parent,
         __('Honeypot', 'apiosys-honeypot-cf7'),
         __('Honeypot', 'apiosys-honeypot-cf7'),
         'manage_options',
@@ -1305,7 +1313,7 @@ function apiosys_honeypot_cf7_link_limit_validation($result, $tag) {
 add_action('wp_enqueue_scripts', 'apiosys_honeypot_cf7_enqueue_styles');
 function apiosys_honeypot_cf7_enqueue_styles() {
     // Register the style handle (no file needed for inline-only styles)
-    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.4');
+    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.5');
     
     // Enqueue the registered style
     wp_enqueue_style('apiosys-honeypot-cf7');
