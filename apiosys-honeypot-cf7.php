@@ -3,7 +3,7 @@
  * Plugin Name: Apio systems - Honeypot for Contact Form 7
  * Plugin URI: https://apio.systems
  * Description: Advanced Honeypot plugin for Contact Form 7 to drastically reduce spam on form submissions without user interaction. Includes multiple honeypot fields, checkbox trap, time-based validation, and comprehensive content analysis. Store results in Flamingo.
- * Version: 1.0.5
+ * Version: 1.0.6
  * Author: Joris Le Blansch
  * Author URI: https://www.apio.systems
  * License: MIT
@@ -160,6 +160,102 @@ function apiosys_honeypot_cf7_count_link_domains($message, $email) {
     return array_keys($domains);
 }
 
+// This site's own domain, from home_url(): lowercase, without "www." or port
+// (e.g. "example.com"). '' when it cannot be determined.
+function apiosys_honeypot_cf7_site_domain() {
+    $host = wp_parse_url(home_url(), PHP_URL_HOST);
+    if (!is_string($host) || $host === '') {
+        return '';
+    }
+    $host = strtolower($host);
+    if (strpos($host, 'www.') === 0) {
+        $host = substr($host, 4);
+    }
+    return $host;
+}
+
+// Find a link left by templated cold outreach, which a real enquirer never sends:
+// an unsubscribe/opt-out link (the sender treats you as a mailing-list contact), or
+// a link to another website whose query string carries this site's own domain
+// (e.g. ...?d=example.com, a per-target tracking link to see who clicks).
+// Links to this site itself are ignored. Returns a log reason, or '' if none.
+function apiosys_honeypot_cf7_find_outreach_link($text) {
+    if (!is_string($text) || $text === '') {
+        return '';
+    }
+    if (!preg_match_all('#(?:https?://|www\.)[^\s<>"\']+#i', $text, $matches)) {
+        return '';
+    }
+    $site_domain = apiosys_honeypot_cf7_site_domain();
+    foreach ($matches[0] as $url) {
+        $url = rtrim($url, ".,;:!?)]}");
+        $host = apiosys_honeypot_cf7_link_hosts($url);
+        $host = empty($host) ? '' : $host[0];
+        if ($host === '' || apiosys_honeypot_cf7_domain_matches($host, $site_domain)) {
+            continue;
+        }
+        // Everything after the host: path, query and fragment
+        $rest = strtolower(rawurldecode((string) preg_replace('#^(?:https?://)?[^/?\#]*#i', '', $url)));
+        if (preg_match('/unsubscri|opt[-_]?out|\bunsub\b/', $rest)) {
+            /* translators: %s: domain of the link */
+            return sprintf(__('Unsubscribe/opt-out link in message (%s)', 'apiosys-honeypot-cf7'), $host);
+        }
+        $query_pos = strpos($rest, '?');
+        if ($site_domain !== '' && $query_pos !== false &&
+            strpos(substr($rest, $query_pos), $site_domain) !== false) {
+            /* translators: %s: domain of the link */
+            return sprintf(__('Tracking link carrying this site\'s domain (%s)', 'apiosys-honeypot-cf7'), $host);
+        }
+    }
+    return '';
+}
+
+// Whether the text addresses this site by a name made from its domain, the way
+// mail-merge outreach fills in {domain}: "Hi Example Com team", or "Exampleshop" as a
+// name when the site never calls itself that. Writing the domain normally
+// ("example.com") does not count, and neither does the bare name when it is a word
+// of the site title (a site titled "Acme" at acme.com is legitimately called Acme).
+function apiosys_honeypot_cf7_mentions_site_name($text) {
+    $domain = apiosys_honeypot_cf7_site_domain();
+    if (!is_string($text) || $text === '' || strpos($domain, '.') === false) {
+        return false;
+    }
+    // The name part of the domain: "example" for example.com, shop.example.com
+    // and example.co.uk (a short second-level label such as "co"/"com" is skipped)
+    $labels = explode('.', $domain);
+    $tld = array_pop($labels);
+    if (count($labels) > 1 && strlen(end($labels)) <= 3) {
+        array_pop($labels);
+    }
+    $label = end($labels);
+    if (strlen($label) < 4) {
+        return false;
+    }
+    // Not preceded by a word character, dot, @ or slash (part of a URL or address)
+    $before = '(?<![\w.@\/-])';
+    // "idm13" also matches "Idm 13" / "idm-13"
+    $parts = preg_split('/(?<=[a-z])(?=[0-9])|(?<=[0-9])(?=[a-z])/', $label);
+    $flexible = implode('[\s-]*', array_map('preg_quote', $parts));
+
+    // 1. Name plus TLD written as separate words: "Idm 13 Fr", "Example Com"
+    if (preg_match('/' . $before . $flexible . '[\s-]+' . preg_quote($tld, '/') . '\b/i', $text)) {
+        return true;
+    }
+
+    // 2. The domain name used on its own as a name, unless the site title uses it
+    $title_words = explode(' ', apiosys_honeypot_cf7_normalize(get_bloginfo('name')));
+    if (in_array($label, $title_words, true)) {
+        return false;
+    }
+    // Capitalized like a name ("Exampleshop", not "exampleshop": a domain that is an
+    // ordinary word must not score every time the word is used), and not followed by
+    // more word characters or by ".tld" (then it is written as a domain)
+    $first = preg_quote(substr($label, 0, 1), '/');
+    $pattern = '/' . $before . '(?-i:' . strtoupper($first) . ')' .
+        preg_quote(substr($label, 1), '/') . '(?![\w@]|\.[a-z0-9])/i';
+    return (bool) preg_match($pattern, $text);
+}
+
 // Whether an email address uses one of the configured free/personal providers
 // (gmail.com, hotmail.com, ...). Matches the exact domain or any subdomain of it.
 function apiosys_honeypot_cf7_is_free_email($email) {
@@ -194,16 +290,19 @@ function apiosys_honeypot_cf7_default_settings() {
         'max_submit_time' => 3600,
         'enable_email_domain_check' => 1,
         'suspicious_tlds' => ".shop\n.top\n.xyz\n.click\n.link\n.work\n.gdn\n.men\n.loan\n.date\n.racing\n.win\n.bid\n.stream\n.trade\n.accountant\n.science\n.party\n.download\n.review\n.webcam\n.cricket\n.faith",
-        'spam_keywords' => "act fast\nact now\namazing opportunity\nbacklinks\nbetting\nbitcoin\nboost greater traffic\nboost your ranking\nbuy now\ncash flow\ncasino\ncheck this out\ncialis\nclaim your\nclick here\ncongratulations\ncrypto\ndon't miss out\nearn money\nearning money\nevaluation copy\nfacebook likes\nflash offer\nforex\nfree audit\nfree dating\nfree site audit\ngain followers\ngambling\nget more followers\ngoogle ranking\ngrow your brand\ngrow your business\nhundreds of dollars\nincrease followers\nincrease traffic\ninstagram followers\ninvestment opportunity\nlimited offer\nlimited time\nlimited-time deal\nlink building\nloan\nmake money\nmaking money\nmoney back guarantee\nmoney flow\nmortgage\nno obligation\norder now\npassive income\npharmacy\npoker\npornhub\nprescription\nproduce leads\nreal deal\nrisk free\nseo boost\nseo service\nseo services\nsite audit\nskeptical at first\nspecial offer\nthis system\nthousands of dollars\nunlock real growth\nvisit now\nweight loss\nwork from home\nyou've been selected\nyoutube views\noff topic but\nI was wondering if you knew\nI've been looking for\nI truly enjoy reading your blog\nlook forward to your new updates\nPlease let me know if you run into\nwould have some experience with\nfeel free to visit my\nvisit my web\nmy website\nmy blog\nmy page\nhere is my\nstop by my\ncheck out my\nalso visit my\ngreat blog you have\nnice blog here\namazing blog\nexcellent blog\nwonderful blog\nfantastic blog\nsuperb blog\nterrific blog\ngreat site you have\nnice site here\nawesome website\ngreat post\nnice post\nexcellent post\nwonderful post",
+        'spam_keywords' => "act fast\nact now\namazing opportunity\nbacklinks\nbetting\nbitcoin\nboost greater traffic\nboost your ranking\nbuy now\ncash flow\ncasino\ncheck this out\ncialis\nclaim your\nclick here\ncongratulations\ncrypto\ndon't miss out\nearn money\nearning money\nevaluation copy\nfacebook likes\nflash offer\nforex\nfree audit\nfree dating\nfree site audit\ngain followers\ngambling\nget more followers\ngoogle ranking\ngrow your brand\ngrow your business\nhundreds of dollars\nincrease followers\nincrease traffic\ninstagram followers\ninvestment opportunity\nlimited offer\nlimited time\nlimited-time deal\nlink building\nloan\nmake money\nmaking money\nmoney back guarantee\nmoney flow\nmortgage\nno obligation\norder now\npassive income\nonline pharmacy\npoker\npornhub\nprescription\nproduce leads\nreal deal\nrisk free\nseo boost\nseo service\nseo services\nsite audit\nchatgpt visibility\nvisibility in chatgpt\nai visibility\nvisibility report\ngeo expert\ngenerative engine optimization\ncame in through your contact form\nskeptical at first\nspecial offer\nthousands of dollars\nunlock real growth\nvisit now\nweight loss\nwork from home\nyou've been selected\nyoutube views\noff topic but\nI was wondering if you knew\nI've been looking for\nI truly enjoy reading your blog\nlook forward to your new updates\nPlease let me know if you run into\nwould have some experience with\nfeel free to visit my\nvisit my web\nmy website\nmy blog\nmy page\nhere is my\nstop by my\ncheck out my\nalso visit my\ngreat blog you have\nnice blog here\namazing blog\nexcellent blog\nwonderful blog\nfantastic blog\nsuperb blog\nterrific blog\ngreat site you have\nnice site here\nawesome website\ngreat post\nnice post\nexcellent post\nwonderful post",
         'message_field_names' => "your-message\nmessage\nyour-comment\ncomment\nyour-subject\nsubject",
         'email_field_names' => "your-email\nemail\nyour-mail\nmail",
         'text_field_names' => "your-name\nfirst-name\nlast-name\nname\nfull-name\ncompany-name\ncompany\nyour-company\norganization\njob-title\njob\nposition\nyour-subject\nsubject",
         'disallow_message_links' => 0,
         'allow_sender_domain_links' => 1,
+        'block_outreach_links' => 1,
         'enable_link_limit_validation' => 0,
         'link_limit_message' => '',
         'enable_scoring' => 1,
         'spam_score_threshold' => 3,
+        'enable_site_name_signal' => 1,
+        'no_js_score' => 2,
         'enable_free_email_signal' => 1,
         'free_email_domains' => "gmail.com\ngooglemail.com\nyahoo.com\nyahoo.co.uk\nymail.com\nhotmail.com\nhotmail.co.uk\noutlook.com\nlive.com\nmsn.com\naol.com\nicloud.com\nme.com\nmac.com\ngmx.com\ngmx.net\nmail.com\nmail.ru\nprotonmail.com\nproton.me\nyandex.com\nyandex.ru\nzoho.com\ntutanota.com\ninbox.com\nfastmail.com",
         'company_field_names' => "company-name\ncompany\nyour-company\norganization\norganisation\nbusiness\nbusiness-name",
@@ -283,10 +382,13 @@ function apiosys_honeypot_cf7_sanitize_settings($input) {
     $sanitized['text_field_names'] = isset($input['text_field_names']) ? sanitize_textarea_field($input['text_field_names']) : '';
     $sanitized['disallow_message_links'] = isset($input['disallow_message_links']) ? 1 : 0;
     $sanitized['allow_sender_domain_links'] = isset($input['allow_sender_domain_links']) ? 1 : 0;
+    $sanitized['block_outreach_links'] = isset($input['block_outreach_links']) ? 1 : 0;
     $sanitized['enable_link_limit_validation'] = isset($input['enable_link_limit_validation']) ? 1 : 0;
     $sanitized['link_limit_message'] = isset($input['link_limit_message']) ? sanitize_text_field($input['link_limit_message']) : '';
     $sanitized['enable_scoring'] = isset($input['enable_scoring']) ? 1 : 0;
     $sanitized['spam_score_threshold'] = isset($input['spam_score_threshold']) ? max(1, absint($input['spam_score_threshold'])) : 3;
+    $sanitized['enable_site_name_signal'] = isset($input['enable_site_name_signal']) ? 1 : 0;
+    $sanitized['no_js_score'] = isset($input['no_js_score']) ? min(3, absint($input['no_js_score'])) : 2;
     $sanitized['enable_free_email_signal'] = isset($input['enable_free_email_signal']) ? 1 : 0;
     $sanitized['free_email_domains'] = isset($input['free_email_domains']) ? sanitize_textarea_field($input['free_email_domains']) : '';
     $sanitized['company_field_names'] = isset($input['company_field_names']) ? sanitize_textarea_field($input['company_field_names']) : '';
@@ -452,6 +554,15 @@ function apiosys_honeypot_cf7_settings_page() {
                 </tr>
                 <tr>
                     <th scope="row">
+                        <label for="block_outreach_links"><?php esc_html_e('Block Outreach Tracking Links', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="checkbox" id="block_outreach_links" name="apiosys_honeypot_cf7_settings[block_outreach_links]" value="1" <?php checked($options['block_outreach_links'], 1); ?> />
+                        <p class="description"><?php esc_html_e('On by default. Marks a submission as spam when it contains an unsubscribe/opt-out link, or a link to another website that carries this site\'s own domain (e.g. ...?d=example.com). Mass cold-outreach tools add these to track who responds; a real visitor never sends them. Applies even when the link goes to the sender\'s own domain. Links to this site itself are ignored.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
                         <label for="enable_link_limit_validation"><?php esc_html_e('Ask the Visitor to Remove Extra Links', 'apiosys-honeypot-cf7'); ?></label>
                     </th>
                     <td>
@@ -492,7 +603,7 @@ function apiosys_honeypot_cf7_settings_page() {
                     </th>
                     <td>
                         <textarea id="spam_keywords" name="apiosys_honeypot_cf7_settings[spam_keywords]" rows="18" class="large-text code"><?php echo esc_textarea($options['spam_keywords']); ?></textarea>
-                        <p class="description"><?php esc_html_e('One keyword or phrase per line. Any submission containing one of these (in the message or the additional scanned fields) is marked as spam. Case-insensitive; hyphens, punctuation and accents are ignored, so "no-obligation" matches "no obligation".', 'apiosys-honeypot-cf7'); ?></p>
+                        <p class="description"><?php esc_html_e('One keyword or phrase per line. Any submission containing one of these (in the message or the additional scanned fields) is marked as spam. Case-insensitive and matched as whole words (plurals included), so "loan" matches "loans" but not "loaner"; hyphens, punctuation and accents are ignored, so "no-obligation" matches "no obligation".', 'apiosys-honeypot-cf7'); ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -500,7 +611,7 @@ function apiosys_honeypot_cf7_settings_page() {
                 </tr>
                 <tr>
                     <th colspan="2">
-                        <p class="description" style="font-weight:normal;max-width:40em;"><?php esc_html_e('Catches "human-looking" spam that passes every individual check. Each weak signal below adds points; a submission is marked as spam only when the total reaches the threshold. Signals include: link in the message, link in another field, free/disposable email provider, gmail plus-alias tricks, random digits in the email name, a very short message, "Name &amp; Name Services" company patterns, a company name paired with a free email, and no JavaScript detected.', 'apiosys-honeypot-cf7'); ?></p>
+                        <p class="description" style="font-weight:normal;max-width:40em;"><?php esc_html_e('Catches "human-looking" spam that passes every individual check. Each weak signal below adds points; a submission is marked as spam only when the total reaches the threshold. Signals include: link in the message, link in another field, free/disposable email provider, gmail plus-alias tricks, random digits in the email name, a very short message, "Name &amp; Name Services" company patterns, a company name paired with a free email, this site\'s domain used as a name, and no JavaScript detected.', 'apiosys-honeypot-cf7'); ?></p>
                     </th>
                 </tr>
                 <tr>
@@ -519,6 +630,24 @@ function apiosys_honeypot_cf7_settings_page() {
                     <td>
                         <input type="number" id="spam_score_threshold" name="apiosys_honeypot_cf7_settings[spam_score_threshold]" value="<?php echo esc_attr($options['spam_score_threshold']); ?>" min="1" max="10" class="small-text" />
                         <p class="description"><?php esc_html_e('Points required to mark a submission as spam. Lower = more aggressive (2), balanced = 3, higher = more lenient (4+).', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="no_js_score"><?php esc_html_e('Points When JavaScript Is Missing', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="number" id="no_js_score" name="apiosys_honeypot_cf7_settings[no_js_score]" value="<?php echo esc_attr($options['no_js_score']); ?>" min="0" max="3" class="small-text" />
+                        <p class="description"><?php esc_html_e('Points added when the form was submitted without running JavaScript in a browser. Real visitors almost always have JavaScript; many bots post the form directly. Default 2: missing JavaScript plus any one other signal reaches the default threshold. Use 1 to make it a weak signal again, or 0 to ignore it.', 'apiosys-honeypot-cf7'); ?></p>
+                    </td>
+                </tr>
+                <tr>
+                    <th scope="row">
+                        <label for="enable_site_name_signal"><?php esc_html_e('Site Domain Used as a Name', 'apiosys-honeypot-cf7'); ?></label>
+                    </th>
+                    <td>
+                        <input type="checkbox" id="enable_site_name_signal" name="apiosys_honeypot_cf7_settings[enable_site_name_signal]" value="1" <?php checked($options['enable_site_name_signal'], 1); ?> />
+                        <p class="description"><?php esc_html_e('Add a point when the submission calls this site by a name made from its domain, the way mail-merge outreach fills it in ("Hi Example Com team", or "Exampleshop" when the site title never uses that name). Writing the domain normally (example.com) does not count.', 'apiosys-honeypot-cf7'); ?></p>
                     </td>
                 </tr>
                 <tr>
@@ -851,6 +980,20 @@ function apiosys_honeypot_cf7_content_analysis($spam, $submission) {
         return $spam;
     }
 
+    // 0. Outreach tracking/opt-out links, in any scanned field. Checked before the
+    // URL limit because links to the sender's own domain are exempt there.
+    if (apiosys_honeypot_cf7_get_option('block_outreach_links', 1)) {
+        $outreach = apiosys_honeypot_cf7_find_outreach_link($scan_text);
+        if ($outreach !== '') {
+            $spam = true;
+            $submission->add_spam_log(array(
+                'agent' => 'content-analysis',
+                'reason' => $outreach
+            ));
+            return $spam;
+        }
+    }
+
     // Checks 1-3, 6-7 apply to the main message field specifically
     if ($message !== '') {
         // 1. Excessive or disallowed URLs. Counts distinct link domains (http/https
@@ -951,6 +1094,8 @@ function apiosys_honeypot_cf7_content_analysis($spam, $submission) {
 
     // 4/5. Spam keywords & phrases (merged list), matched across every scanned field.
     // Both the text and the keywords are normalized so "no-obligation" matches "no obligation".
+    // Matched as whole words (a plural "s"/"es" is allowed), so "cialis" no longer
+    // fires on "specialist" nor "loan" on "loaner".
     $keywords_str = apiosys_honeypot_cf7_get_option('spam_keywords', '');
     $legacy_phrases = apiosys_honeypot_cf7_get_option('spam_phrases', ''); // pre-1.0.0 installs
     if ($legacy_phrases !== '') {
@@ -961,7 +1106,8 @@ function apiosys_honeypot_cf7_content_analysis($spam, $submission) {
 
     foreach ($spam_keywords as $keyword) {
         $normalized_keyword = apiosys_honeypot_cf7_normalize($keyword);
-        if ($normalized_keyword !== '' && strpos($normalized_text, $normalized_keyword) !== false) {
+        if ($normalized_keyword !== '' &&
+            preg_match('/(?:^| )' . preg_quote($normalized_keyword, '/') . '(?:e?s)?(?= |$)/', $normalized_text)) {
             $spam = true;
             $submission->add_spam_log(array(
                 'agent' => 'content-analysis',
@@ -1068,9 +1214,18 @@ function apiosys_honeypot_cf7_scoring($spam, $submission) {
         $reasons[] = 'company name with free email';
     }
 
-    // No JavaScript marker (bots that do not execute JS never set this field)
-    if (!isset($data['cf7_js_check']) || $data['cf7_js_check'] !== 'enabled') {
+    // This site addressed by a name built from its domain ("Hi Example Com team")
+    if (apiosys_honeypot_cf7_get_option('enable_site_name_signal', 1) &&
+        apiosys_honeypot_cf7_mentions_site_name($message . "\n" . $other_text)) {
         $score += 1;
+        $reasons[] = 'site domain used as a name';
+    }
+
+    // No JavaScript marker (bots that do not execute JS never set this field)
+    $no_js_points = intval(apiosys_honeypot_cf7_get_option('no_js_score', 2));
+    if ($no_js_points > 0 &&
+        (!isset($data['cf7_js_check']) || $data['cf7_js_check'] !== 'enabled')) {
+        $score += $no_js_points;
         $reasons[] = 'no javascript detected';
     }
 
@@ -1313,7 +1468,7 @@ function apiosys_honeypot_cf7_link_limit_validation($result, $tag) {
 add_action('wp_enqueue_scripts', 'apiosys_honeypot_cf7_enqueue_styles');
 function apiosys_honeypot_cf7_enqueue_styles() {
     // Register the style handle (no file needed for inline-only styles)
-    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.5');
+    wp_register_style('apiosys-honeypot-cf7', false, array(), '1.0.6');
     
     // Enqueue the registered style
     wp_enqueue_style('apiosys-honeypot-cf7');
@@ -1368,15 +1523,26 @@ function apiosys_honeypot_cf7_footer_script() {
     ?>
     <script>
     (function() {
-        // Add a marker that JavaScript is enabled
-        // Bots that don't run JS won't have this
-        var forms = document.querySelectorAll('.wpcf7-form');
-        forms.forEach(function(form) {
+        // Add a marker that JavaScript is enabled. Bots that post the form
+        // directly never send it. Forms inserted after page load (popups,
+        // page builders) are covered by marking them on focus and on submit;
+        // the capture-phase submit listener runs before CF7 reads the form.
+        function mark(form) {
+            if (!form || !form.classList || !form.classList.contains('wpcf7-form') ||
+                form.querySelector('input[name="cf7_js_check"]')) {
+                return;
+            }
             var jsField = document.createElement('input');
             jsField.type = 'hidden';
             jsField.name = 'cf7_js_check';
             jsField.value = 'enabled';
             form.appendChild(jsField);
+        }
+        document.querySelectorAll('.wpcf7-form').forEach(mark);
+        ['focusin', 'submit'].forEach(function(type) {
+            document.addEventListener(type, function(e) {
+                mark(e.target && e.target.closest ? e.target.closest('form') : null);
+            }, true);
         });
     })();
     </script>

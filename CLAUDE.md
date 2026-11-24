@@ -54,15 +54,19 @@ the first failing check wins and later checks are skipped. Each failure calls
    manipulated, too-fast, or too-old timestamp.
 4. `apiosys_honeypot_cf7_email_domain_check` (10) — email TLD against the
    suspicious-TLD list (toggleable).
-5. `apiosys_honeypot_cf7_content_analysis` (10) — **hard blocks.** URL/link count
+5. `apiosys_honeypot_cf7_content_analysis` (10) — **hard blocks.** First, outreach
+   links in any scanned field (`block_outreach_links`): an unsubscribe/opt-out link, or
+   a foreign link whose query carries this site's domain (`?d=example.com`); checked
+   before the URL limit because the sender-domain exemption would hide them. Then URL/link count
    (counted as **distinct link domains**, not occurrences, with links to the
    sender's own email domain skipped when `allow_sender_domain_links` is on)
    and uppercase %, min word count, repetitive patterns and **whitespace/blank-line
    flooding**, excessive special characters (all on the message field); plus a
    single merged **keyword/phrase** scan run across the message **and** the extra
    `text_field_names` fields, using `apiosys_honeypot_cf7_normalize()` so hyphens,
-   punctuation and accents don't defeat a match. Honors the `disallow_message_links`
-   toggle.
+   punctuation and accents don't defeat a match. Keywords match **whole words**
+   (optional plural `s`/`es`): substring matching made "cialis" hit "specialist".
+   Honors the `disallow_message_links` toggle.
 6. `apiosys_honeypot_cf7_field_pattern_analysis` (10) — company-name / job-title
    heuristics (mostly weak signals; only the "Name & Name GbR/LLC + non-Latin"
    pattern actually blocks).
@@ -70,7 +74,9 @@ the first failing check wins and later checks are skipped. Each failure calls
    every hard check passes. Accumulates points from many individually-innocent
    signals (link in message, link in another field, free/disposable email, gmail
    dot/plus alias, random digits in the email local-part, very short message,
-   "Name & Name Services/Ltd" company pattern, missing `cf7_js_check`) and flags
+   "Name & Name Services/Ltd" company pattern, site domain used as a name
+   (`enable_site_name_signal`), missing `cf7_js_check` worth `no_js_score` points,
+   default 2) and flags
    spam when the total reaches `spam_score_threshold`. This is what catches
    "human-looking" spam that no single rule would.
 
@@ -100,7 +106,9 @@ http/www links, normalized: no userinfo, port, `www.` or trailing punctuation),
 (exact-or-subdomain, deliberately not fuzzy), and
 `apiosys_honeypot_cf7_count_link_domains()` (distinct link domains after the
 sender-domain allowlist — the single source of truth shared by the spam check
-and the validation nudge). Use these instead of re-implementing field lookups.
+and the validation nudge), `apiosys_honeypot_cf7_site_domain()` (home_url host
+without `www.`), `apiosys_honeypot_cf7_find_outreach_link()` and
+`apiosys_honeypot_cf7_mentions_site_name()`. Use these instead of re-implementing field lookups.
 
 ### Configurable field-name lists
 The plugin does not assume fixed CF7 field names. `message_field_names` and
@@ -119,7 +127,13 @@ keywords+phrases), `message_field_names`, `email_field_names`,
 `free_email_domains`, `company_field_names`, `enable_company_email_mismatch`,
 `enable_work_email_validation`, `work_email_message`,
 `allow_sender_domain_links`, `enable_link_limit_validation`,
-`link_limit_message`.
+`link_limit_message`, `block_outreach_links`, `enable_site_name_signal`,
+`no_js_score`.
+
+New keys are absent from existing installs' saved option until the settings page
+is saved, so the default passed to `apiosys_honeypot_cf7_get_option()` is what
+existing sites actually run with: keep it equal to the default in
+`apiosys_honeypot_cf7_default_settings()`.
 
 `spam_phrases` is **removed** as of 1.0.0; `apiosys_honeypot_cf7_maybe_migrate()`
 folds any legacy value into `spam_keywords` once, on `admin_init`.
@@ -148,9 +162,9 @@ When you add a setting: (1) add a default in
 The version appears in **three** places that must stay in sync:
 1. `Version:` header in `apiosys-honeypot-cf7.php` (the single source of truth —
    there is intentionally no `@version` docblock tag to duplicate it),
-2. the CSS version string in `wp_register_style()` (currently `1.0.5`),
+2. the CSS version string in `wp_register_style()` (currently `1.0.6`),
 3. `Stable tag:` in `readme.txt`.
 
 Also update the `== Changelog ==` section in `readme.txt` (this is the canonical
 changelog) and bump `Tested up to:` when validated against a new WP release.
-Current version: **1.0.5** (ship further fixes as 1.0.6, etc.).
+Current version: **1.0.6** (ship further fixes as 1.0.7, etc.).

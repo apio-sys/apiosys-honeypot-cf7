@@ -3,7 +3,7 @@ Contributors: apiosys
 Tags: honeypot, antispam, forms
 Requires at least: 6.5
 Tested up to: 7.1
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 Requires PHP: 7.2
 License: MIT
 License URI: https://github.com/apio-sys/apiosys-honeypot-cf7/blob/main/LICENSE
@@ -57,6 +57,14 @@ It has been tested on several high-traffic WP sites. I see a return of ~ 1 ‰ (
 - Complete the rest of the options which you can find in Admin > Contact > Honeypot. A generally good working set of values is enabled by default there.
 
 == Changelog ==
+= 1.0.6 - 2026-11-24 =
+* NEW: "Block Outreach Tracking Links" (on by default). A submission is marked as spam when it contains an unsubscribe/opt-out link, or a link to another website whose query string carries this site's own domain (e.g. `...?d=example.com`). Mass cold-outreach tools add these to see who responds; a real visitor never sends them. It applies even when the link points to the sender's own email domain, which the URL limit exempts. Links to the site itself are ignored.
+* NEW: "Site Domain Used as a Name" scoring signal (on by default, 1 point). Mail-merge outreach addresses the site by a name built from its domain ("Hi Example Com team", or "Exampleshop" when the site title never uses that name). Writing the domain normally (example.com), or a name that is part of the site title, does not count.
+* NEW: "Points When JavaScript Is Missing" (0-3, default 2, previously a fixed 1). Replayed against real Flamingo data, every non-spam message received since the JavaScript marker was introduced carried it, while the bots now getting past the honeypot and timestamp checks do not run JavaScript. Missing JavaScript plus any one other signal now reaches the default threshold.
+* IMPROVEMENT: The JavaScript marker is now also added to forms inserted after page load (popups, page builders), so they are not mistaken for JavaScript-less submissions.
+* FIX: Spam keywords are now matched as whole words (plurals included). Previously they matched inside other words, so "cialis" flagged anyone whose job title was "specialist" and "loan" flagged "loaner"; this caused confirmed false positives. Replayed on real data, no genuine keyword catch was lost.
+* CHANGE: Default spam keywords: added AI-visibility / "GEO" outreach phrases (e.g. "chatgpt visibility", "geo expert"); replaced "pharmacy" with "online pharmacy" and removed "this system", both of which matched real enquiries. Existing installs keep their own keyword list; add or remove these by hand if wanted.
+
 = 1.0.5 - 2026-11-09 =
 * FIX: The Honeypot settings page disappeared from the Contact menu with Contact Form 7 6.2, which moved its top-level menu to a new slug (`wpcf7-dashboard`). The submenu now attaches to whichever Contact menu slug the installed Contact Form 7 version registers, so it shows again on 6.2+ and keeps working on older versions. The settings page URL is unchanged.
 
